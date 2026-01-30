@@ -1,0 +1,54 @@
+services:
+  x-anylabeling-server:
+    image: x-anylabeling-server:dev
+    container_name: x-anylabeling-server
+    ports:
+      - "8020:8000"
+    working_dir: /X-AnyLabeling-Server
+    environment:
+      # HuggingFace 镜像配置（使用 hf-mirror.com）
+      HF_ENDPOINT: "https://hf-mirror.com"
+      HUGGINGFACE_HUB_CACHE: "/data/zxy/X-AnyLabeling-Server/hf-cache"
+      HF_HOME: "/data/zxy/X-AnyLabeling-Server/hf-cache"
+
+      # 服务器配置环境变量（可选）
+      # XANYLABELING_SERVER_CONFIG: /app/configs/server.yaml
+      # XANYLABELING_MODELS_CONFIG: /app/configs/models.yaml
+      
+      # API Key 配置（如果启用认证）
+      # XANYLABELING_API_KEY: your-api-key-here
+      
+      # 其他环境变量（如 API keys for external services）
+      # ZHIPU_API_KEY: your-zhipu-api-key
+      # OPENAI_API_KEY: your-openai-api-key
+      
+      # Python 环境变量
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      # CUDA 调试模式（同步执行，便于调试，但会降低性能）
+      CUDA_LAUNCH_BLOCKING: "1"
+      # PyTorch CUDA 设备端断言（提供更详细的错误信息）
+      TORCH_USE_CUDA_DSA: "1"
+    volumes:
+      # 挂载项目代码和配置文件（必需）
+      - /data/zxy/X-AnyLabeling-Server:/X-AnyLabeling-Server
+    restart: always
+    # GPU 支持（SAM3 需要 CUDA 12.6+）
+    # 只使用宿主机 GPU 1
+    # 如果没有 GPU 或想使用 CPU，可以注释掉下面的 deploy 部分
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]   # 宿主机上的唯一一张 GPU（索引 0）
+              capabilities: [gpu]
+    command: bash -lc "cd /X-AnyLabeling-Server && python -m app.cli --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
