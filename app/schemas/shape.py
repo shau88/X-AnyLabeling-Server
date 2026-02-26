@@ -14,6 +14,7 @@ class Shape(BaseModel):
         "line",
         "circle",
         "linestrip",
+        "quadrilateral",
     ]
 
     label: str
@@ -25,6 +26,7 @@ class Shape(BaseModel):
         "line",
         "circle",
         "linestrip",
+        "quadrilateral",
     ]
     points: List[List[float]]
     score: Optional[float] = Field(None, ge=0.0, le=1.0)

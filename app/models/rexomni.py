@@ -36,14 +36,16 @@ class RexOmni(BaseModel):
         import torch
 
         init_kwargs = {
-            "device_map": device_map,
-            "torch_dtype": torch.bfloat16,
             "trust_remote_code": True,
         }
-        if attn_implementation is not None:
-            init_kwargs["attn_implementation"] = attn_implementation
 
-        if backend == "vllm":
+        if backend == "transformers":
+            init_kwargs.update({
+                "device_map": device_map,
+                "torch_dtype": torch.bfloat16,
+            })
+
+        elif backend == "vllm":
             init_kwargs.update(
                 {
                     "tokenizer_mode": self.params.get(
@@ -73,6 +75,7 @@ class RexOmni(BaseModel):
             repetition_penalty=self.params.get("repetition_penalty", 1.05),
             min_pixels=self.params.get("min_pixels", 16 * 28 * 28),
             max_pixels=self.params.get("max_pixels", 2560 * 28 * 28),
+            attn_implementation=attn_implementation,
             **init_kwargs,
         )
         self.task_type = TaskType
@@ -235,8 +238,11 @@ class RexOmni(BaseModel):
             else:
                 categories = ["text line"]
             return self._predict_ocr_box(pil_image, categories)
-        elif task == "ocr_polygon_text_line":
-            categories = ["text line"]
+        elif task in ["ocr_polygon_word", "ocr_polygon_text_line"]:
+            if task == "ocr_polygon_word":
+                categories = ["word"]
+            else:
+                categories = ["text line"]
             return self._predict_ocr_polygon(pil_image, categories)
         elif task == "pointing":
             return self._predict_pointing(pil_image, text_prompt)
@@ -353,7 +359,7 @@ class RexOmni(BaseModel):
         result = results[0]
         extracted = result.get("extracted_predictions", {})
         shapes = self._convert_ocr_to_shapes(
-            extracted, categories, shape_type="polygon"
+            extracted, categories, shape_type="quadrilateral"
         )
 
         return {"shapes": shapes, "description": ""}
@@ -552,13 +558,13 @@ class RexOmni(BaseModel):
                             description=text,
                         )
                         shapes.append(shape)
-                elif ann_type == "polygon" and shape_type == "polygon":
+                elif ann_type == "polygon" and shape_type == "quadrilateral":
                     if len(coords) >= 3:
                         points = [[float(p[0]), float(p[1])] for p in coords]
                         text = ann.get("text", category)
                         shape = Shape(
                             label=categories[0],
-                            shape_type="polygon",
+                            shape_type="quadrilateral",
                             points=points,
                             description=text,
                         )

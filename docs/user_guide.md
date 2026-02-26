@@ -153,6 +153,7 @@ Each `Shape` object should have the following properties:
 
 - **`rectangle`**: Horizontal bounding box defined by 4 corner points
 - **`polygon`**: Closed polygon with 3+ vertices
+- **`quadrilateral`**: Four-sided polygon with 4 vertices
 - **`rotation`**: Oriented/rotated bounding box
 - **`point`**: Single point coordinate
 - **`line`**: Line segment with start and end points
