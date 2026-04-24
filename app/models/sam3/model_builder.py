@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved
 
+import logging
 import os
 from typing import Optional
 
@@ -50,6 +51,9 @@ from sam3.model.vl_combiner import SAM3VLBackbone
 from sam3.sam.transformer import RoPEAttention
 
 
+SAM3_DEFAULT_IMAGE_SIZE = 1008
+
+
 # Setup TensorFloat-32 for Ampere GPUs if available
 def _setup_tf32() -> None:
     """Enable TensorFloat-32 for Ampere GPUs if available."""
@@ -74,10 +78,13 @@ def _create_position_encoding(precompute_resolution=None):
     )
 
 
-def _create_vit_backbone(compile_mode=None):
+def _create_vit_backbone(
+    compile_mode=None,
+    image_size=SAM3_DEFAULT_IMAGE_SIZE,
+):
     """Create ViT backbone for visual feature extraction."""
     return ViT(
-        img_size=1008,
+        img_size=image_size,
         pretrain_img_size=336,
         patch_size=14,
         embed_dim=1024,
@@ -337,7 +344,9 @@ def _create_sam3_model(
     return model
 
 
-def _create_tracker_maskmem_backbone():
+def _create_tracker_maskmem_backbone(
+    image_size=SAM3_DEFAULT_IMAGE_SIZE,
+):
     """Create the SAM3 Tracker memory encoder."""
     # Position encoding for mask memory backbone
     position_encoding = PositionEmbeddingSine(
@@ -345,12 +354,17 @@ def _create_tracker_maskmem_backbone():
         normalize=True,
         scale=None,
         temperature=10000,
-        precompute_resolution=1008,
+        precompute_resolution=image_size,
     )
+
+    maskmem_size = image_size // 14 * 16
 
     # Mask processing components
     mask_downsampler = SimpleMaskDownSampler(
-        kernel_size=3, stride=2, padding=1, interpol_size=[1152, 1152]
+        kernel_size=3,
+        stride=2,
+        padding=1,
+        interpol_size=[maskmem_size, maskmem_size],
     )
 
     cx_block_layer = CXBlock(
@@ -373,8 +387,12 @@ def _create_tracker_maskmem_backbone():
     return maskmem_backbone
 
 
-def _create_tracker_transformer():
+def _create_tracker_transformer(
+    image_size=SAM3_DEFAULT_IMAGE_SIZE,
+):
     """Create the SAM3 Tracker transformer components."""
+    feat_size = image_size // 14
+
     # Self attention
     self_attention = RoPEAttention(
         embedding_dim=256,
@@ -382,7 +400,7 @@ def _create_tracker_transformer():
         downsample_rate=1,
         dropout=0.1,
         rope_theta=10000.0,
-        feat_sizes=[72, 72],
+        feat_sizes=[feat_size, feat_size],
         use_fa3=False,
         use_rope_real=False,
     )
@@ -395,7 +413,7 @@ def _create_tracker_transformer():
         dropout=0.1,
         kv_in_dim=64,
         rope_theta=10000.0,
-        feat_sizes=[72, 72],
+        feat_sizes=[feat_size, feat_size],
         rope_k_repeat=True,
         use_fa3=False,
         use_rope_real=False,
@@ -442,6 +460,7 @@ def build_tracker(
     apply_temporal_disambiguation: bool,
     with_backbone: bool = False,
     compile_mode=None,
+    image_size: int = SAM3_DEFAULT_IMAGE_SIZE,
 ) -> Sam3TrackerPredictor:
     """
     Build the SAM3 Tracker module for video tracking.
@@ -451,15 +470,18 @@ def build_tracker(
     """
 
     # Create model components
-    maskmem_backbone = _create_tracker_maskmem_backbone()
-    transformer = _create_tracker_transformer()
+    maskmem_backbone = _create_tracker_maskmem_backbone(image_size=image_size)
+    transformer = _create_tracker_transformer(image_size=image_size)
     backbone = None
     if with_backbone:
-        vision_backbone = _create_vision_backbone(compile_mode=compile_mode)
+        vision_backbone = _create_vision_backbone(
+            compile_mode=compile_mode,
+            image_size=image_size,
+        )
         backbone = SAM3VLBackbone(scalp=1, visual=vision_backbone, text=None)
     # Create the Tracker module
     model = Sam3TrackerPredictor(
-        image_size=1008,
+        image_size=image_size,
         num_maskmem=7,
         backbone=backbone,
         backbone_stride=14,
@@ -508,13 +530,20 @@ def _create_text_encoder(bpe_path: str) -> VETextEncoder:
 
 
 def _create_vision_backbone(
-    compile_mode=None, enable_inst_interactivity=True
+    compile_mode=None,
+    enable_inst_interactivity=True,
+    image_size=SAM3_DEFAULT_IMAGE_SIZE,
 ) -> Sam3DualViTDetNeck:
     """Create SAM3 visual backbone with ViT and neck."""
     # Position encoding
-    position_encoding = _create_position_encoding(precompute_resolution=1008)
+    position_encoding = _create_position_encoding(
+        precompute_resolution=image_size
+    )
     # ViT backbone
-    vit_backbone: ViT = _create_vit_backbone(compile_mode=compile_mode)
+    vit_backbone: ViT = _create_vit_backbone(
+        compile_mode=compile_mode,
+        image_size=image_size,
+    )
     vit_neck: Sam3DualViTDetNeck = _create_vit_neck(
         position_encoding,
         vit_backbone,
@@ -534,10 +563,37 @@ def _create_sam3_transformer(
     return TransformerWrapper(encoder=encoder, decoder=decoder, d_model=256)
 
 
-def _load_checkpoint(model, checkpoint_path):
+def _remove_freqs_cis_keys(state_dict):
+    return {
+        key: value
+        for key, value in state_dict.items()
+        if not key.endswith("freqs_cis")
+    }
+
+
+def _torch_load_with_fallback(f, ckpt_path):
+    try:
+        return torch.load(f, map_location="cpu", weights_only=True)
+    except TypeError:
+        if hasattr(f, "seek"):
+            f.seek(0)
+        return torch.load(f, map_location="cpu")
+    except Exception as error:
+        if "Weights only load failed" not in str(error):
+            raise
+        logging.warning(
+            "weights_only checkpoint load failed for %s, retrying with weights_only=False",
+            ckpt_path,
+        )
+        if hasattr(f, "seek"):
+            f.seek(0)
+        return torch.load(f, map_location="cpu", weights_only=False)
+
+
+def _load_checkpoint(model, checkpoint_path, drop_freqs_cis=False):
     """Load model checkpoint from file."""
     with g_pathmgr.open(checkpoint_path, "rb") as f:
-        ckpt = torch.load(f, map_location="cpu", weights_only=True)
+        ckpt = _torch_load_with_fallback(f, checkpoint_path)
     if "model" in ckpt and isinstance(ckpt["model"], dict):
         ckpt = ckpt["model"]
     sam3_image_ckpt = {
@@ -553,7 +609,13 @@ def _load_checkpoint(model, checkpoint_path):
                 if "tracker" in k
             }
         )
+    if drop_freqs_cis:
+        sam3_image_ckpt = _remove_freqs_cis_keys(sam3_image_ckpt)
     missing_keys, _ = model.load_state_dict(sam3_image_ckpt, strict=False)
+    if drop_freqs_cis:
+        missing_keys = [
+            key for key in missing_keys if not key.endswith("freqs_cis")
+        ]
     if len(missing_keys) > 0:
         print(
             f"loaded {checkpoint_path} and found "
@@ -579,6 +641,7 @@ def build_sam3_image_model(
     enable_segmentation=True,
     enable_inst_interactivity=False,
     compile=False,
+    image_size=SAM3_DEFAULT_IMAGE_SIZE,
 ):
     """
     Build SAM3 image model
@@ -607,6 +670,7 @@ def build_sam3_image_model(
     vision_encoder = _create_vision_backbone(
         compile_mode=compile_mode,
         enable_inst_interactivity=enable_inst_interactivity,
+        image_size=image_size,
     )
 
     # Create text components
@@ -631,7 +695,10 @@ def build_sam3_image_model(
     # Create geometry encoder
     input_geometry_encoder = _create_geometry_encoder()
     if enable_inst_interactivity:
-        sam3_pvs_base = build_tracker(apply_temporal_disambiguation=False)
+        sam3_pvs_base = build_tracker(
+            apply_temporal_disambiguation=False,
+            image_size=image_size,
+        )
         inst_predictor = SAM3InteractiveImagePredictor(sam3_pvs_base)
     else:
         inst_predictor = None
@@ -649,7 +716,11 @@ def build_sam3_image_model(
         checkpoint_path = download_ckpt_from_hf()
     # Load checkpoint if provided
     if checkpoint_path is not None:
-        _load_checkpoint(model, checkpoint_path)
+        _load_checkpoint(
+            model,
+            checkpoint_path,
+            drop_freqs_cis=image_size != SAM3_DEFAULT_IMAGE_SIZE,
+        )
 
     # Setup device and mode
     model = _setup_device_and_mode(model, device, eval_mode)
@@ -678,6 +749,7 @@ def build_sam3_video_model(
     apply_temporal_disambiguation: bool = True,
     device="cuda" if torch.cuda.is_available() else "cpu",
     compile=False,
+    image_size: int = SAM3_DEFAULT_IMAGE_SIZE,
 ) -> Sam3VideoInferenceWithInstanceInteractivity:
     """
     Build SAM3 dense tracking model.
@@ -699,11 +771,12 @@ def build_sam3_video_model(
 
     # Build Tracker module
     tracker = build_tracker(
-        apply_temporal_disambiguation=apply_temporal_disambiguation
+        apply_temporal_disambiguation=apply_temporal_disambiguation,
+        image_size=image_size,
     )
 
     # Build Detector components
-    visual_neck = _create_vision_backbone()
+    visual_neck = _create_vision_backbone(image_size=image_size)
     text_encoder = _create_text_encoder(bpe_path)
     backbone = SAM3VLBackbone(scalp=1, visual=visual_neck, text=text_encoder)
     transformer = _create_sam3_transformer(
@@ -761,7 +834,7 @@ def build_sam3_video_model(
             recondition_every_nth_frame=16,
             masklet_confirmation_enable=False,
             decrease_trk_keep_alive_for_empty_masklets=True,
-            image_size=1008,
+            image_size=image_size,
             image_mean=(0.5, 0.5, 0.5),
             image_std=(0.5, 0.5, 0.5),
             compile_model=compile,
@@ -787,7 +860,7 @@ def build_sam3_video_model(
             recondition_every_nth_frame=0,
             masklet_confirmation_enable=False,
             decrease_trk_keep_alive_for_empty_masklets=True,
-            image_size=1008,
+            image_size=image_size,
             image_mean=(0.5, 0.5, 0.5),
             image_std=(0.5, 0.5, 0.5),
             compile_model=compile,
@@ -798,13 +871,30 @@ def build_sam3_video_model(
         checkpoint_path = download_ckpt_from_hf()
     if checkpoint_path is not None:
         with g_pathmgr.open(checkpoint_path, "rb") as f:
-            ckpt = torch.load(f, map_location="cpu", weights_only=True)
+            ckpt = _torch_load_with_fallback(f, checkpoint_path)
         if "model" in ckpt and isinstance(ckpt["model"], dict):
             ckpt = ckpt["model"]
+        if image_size != SAM3_DEFAULT_IMAGE_SIZE:
+            ckpt = _remove_freqs_cis_keys(ckpt)
 
         missing_keys, unexpected_keys = model.load_state_dict(
-            ckpt, strict=strict_state_dict_loading
+            ckpt,
+            strict=(
+                strict_state_dict_loading
+                and image_size == SAM3_DEFAULT_IMAGE_SIZE
+            ),
         )
+        if image_size != SAM3_DEFAULT_IMAGE_SIZE:
+            missing_keys = [
+                key for key in missing_keys if not key.endswith("freqs_cis")
+            ]
+            if strict_state_dict_loading and (missing_keys or unexpected_keys):
+                raise RuntimeError(
+                    "Error(s) in loading state_dict for "
+                    f"{model.__class__.__name__}: "
+                    f"missing_keys={missing_keys}, "
+                    f"unexpected_keys={unexpected_keys}"
+                )
         if missing_keys:
             print(f"Missing keys: {missing_keys}")
         if unexpected_keys:

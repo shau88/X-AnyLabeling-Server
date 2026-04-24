@@ -13,5 +13,6 @@ enabled_models:
   # - segment_anything_3_video
   # - glm_4_6v_grounding_api
   # - rexomni
-  - pp_doclayout_v3
-  - paddleocr_vl_1_5
+  # - pp_doclayout_v3
+  # - paddleocr_vl_1_5
+  # - ppocr_layoutstructv3_vl_1_5
