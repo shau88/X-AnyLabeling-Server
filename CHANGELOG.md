@@ -1,3 +1,43 @@
+## `v0.0.11` (Jun 06, 2026)
+
+### 🚀 New Features
+
+- Add LocateAnything support for remote grounding, pointing, and text detection
+
+### 🌟 Contributors
+
+A total of 1 developer contributed to this release.
+
+Thank @CVHub520
+
+## `v0.0.10` (Apr 25, 2026)
+
+### 🚀 New Features
+
+- Add reviewed YOLOE 26s segmentation configs
+
+### 🐛 Bug Fixes
+
+- Use configured CUDA device string for SAM3 inference
+
+### 🌟 Contributors
+
+A total of 2 developers contributed to this release.
+
+Thank @93054182, @CVHub520
+
+## `v0.0.9` (Apr 25, 2026)
+
+### 🚀 New Features
+
+- Add GECO2 support for object counting
+
+### 🌟 Contributors
+
+A total of 1 developer contributed to this release.
+
+Thank @CVHub520
+
 ## `v0.0.8` (Apr 18, 2026)
 
 ### 🚀 New Features
