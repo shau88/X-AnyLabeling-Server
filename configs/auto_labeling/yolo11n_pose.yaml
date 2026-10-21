@@ -4,12 +4,15 @@ batch_processing_mode: "default"
 
 params:
   model_path: "yolo11n-pose.pt"
+  # cuda | cuda:0 | cuda:1 | cpu
   device: "cuda:0"
   show_boxes: true
   kpt_threshold: 0.5
 
 widgets:
   - name: button_run
+    value: null
+  - name: button_classes_filter
     value: null
   - name: input_conf
     value: null

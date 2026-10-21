@@ -4,10 +4,13 @@ batch_processing_mode: "default"
 
 params:
   model_path: "yolo11n.pt"
+  # cuda | cuda:0 | cuda:1 | cpu
   device: "cpu"
 
 widgets:
   - name: button_run
+    value: null
+  - name: button_classes_filter
     value: null
   - name: input_conf
     value: null

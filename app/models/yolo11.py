@@ -1,13 +1,13 @@
 import numpy as np
 from typing import Any, Dict
 
-from . import BaseModel
+from . import UltralyticsYOLOModel
 from app.schemas.shape import Shape
 from app.core.registry import register_model
 
 
 @register_model("yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x")
-class YOLO11Detection(BaseModel):
+class YOLO11Detection(UltralyticsYOLOModel):
     """YOLO11 object detection model."""
 
     def load(self):
@@ -43,7 +43,11 @@ class YOLO11Detection(BaseModel):
         )
 
         results = self.model(
-            image, conf=conf_threshold, iou=iou_threshold, verbose=False
+            image,
+            conf=conf_threshold,
+            iou=iou_threshold,
+            classes=self.get_filter_class_ids(params),
+            verbose=False,
         )
 
         shapes = []

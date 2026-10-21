@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Any, Dict
 
-from . import BaseModel
+from . import UltralyticsYOLOModel
 from app.schemas.shape import Shape
 from app.core.registry import register_model
 
@@ -13,7 +13,7 @@ from app.core.registry import register_model
     "yolo11l_pose",
     "yolo11x_pose",
 )
-class YOLO11Pose(BaseModel):
+class YOLO11Pose(UltralyticsYOLOModel):
     """YOLO11 pose estimation model."""
 
     def load(self):
@@ -49,7 +49,11 @@ class YOLO11Pose(BaseModel):
         )
 
         results = self.model(
-            image, conf=conf_threshold, iou=iou_threshold, verbose=False
+            image,
+            conf=conf_threshold,
+            iou=iou_threshold,
+            classes=self.get_filter_class_ids(params),
+            verbose=False,
         )
 
         shapes = []

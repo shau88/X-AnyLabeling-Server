@@ -1,7 +1,7 @@
 import numpy as np
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class BaseModel(ABC):
@@ -82,6 +82,52 @@ class BaseModel(ABC):
                 "batch_processing_mode", "default"
             ),
         }
+
+
+class UltralyticsYOLOModel(BaseModel):
+    """Base model for Ultralytics YOLO class-filter support."""
+
+    def get_metadata(self) -> Dict[str, Any]:
+        """Return model metadata with class-filter information.
+
+        Returns:
+            Dictionary containing model information and class names.
+        """
+        metadata = super().get_metadata()
+        names = self.model.names
+        metadata["classes"] = (
+            list(names.values()) if isinstance(names, dict) else list(names)
+        )
+        metadata["filter_classes"] = self.params.get("filter_classes")
+        return metadata
+
+    def get_filter_class_ids(
+        self, params: Dict[str, Any]
+    ) -> Optional[List[int]]:
+        """Map requested class names to Ultralytics class IDs.
+
+        Args:
+            params: Inference parameters containing optional filter classes.
+
+        Returns:
+            Selected class IDs, or None when filtering is disabled.
+        """
+        filter_classes = params.get(
+            "filter_classes", self.params.get("filter_classes")
+        )
+        if not filter_classes:
+            return None
+
+        names = self.model.names
+        class_items = (
+            names.items() if isinstance(names, dict) else enumerate(names)
+        )
+        selected_classes = set(filter_classes)
+        return [
+            int(class_id)
+            for class_id, class_name in class_items
+            if class_name in selected_classes
+        ]
 
 
 def parse_prompts(

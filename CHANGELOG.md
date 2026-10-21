@@ -1,3 +1,23 @@
+## `v0.0.12` (Aug 06, 2026)
+
+### 🐛 Bug Fixes
+
+- Fix remote YOLO class filtering across detection, segmentation, pose, OBB, and tracking
+- Fix Segment Anything 2 device handling and concurrent prompt inference (#39)
+- Declare the packaging dependency required by the update checker
+
+### 🛠️ Improvements
+
+- Organize bilingual documentation and automate API reference generation
+- Validate OpenAPI dependencies in CI
+- Update the recommended project citation
+
+### 🌟 Contributors
+
+A total of 1 developer contributed to this release.
+
+Thank @CVHub520
+
 ## `v0.0.11` (Jun 06, 2026)
 
 ### 🚀 New Features

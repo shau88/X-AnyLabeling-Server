@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from typing import Any, Dict
 
-from . import BaseModel
+from . import UltralyticsYOLOModel
 from app.schemas.shape import Shape
 from app.core.registry import register_model
 
@@ -10,7 +10,7 @@ from app.core.registry import register_model
 @register_model(
     "yolo11n_seg", "yolo11s_seg", "yolo11m_seg", "yolo11l_seg", "yolo11x_seg"
 )
-class YOLO11Segmentation(BaseModel):
+class YOLO11Segmentation(UltralyticsYOLOModel):
     """YOLO11 instance segmentation model."""
 
     @staticmethod
@@ -70,7 +70,11 @@ class YOLO11Segmentation(BaseModel):
         orig_h, orig_w = image.shape[:2]
 
         results = self.model(
-            image, conf=conf_threshold, iou=iou_threshold, verbose=False
+            image,
+            conf=conf_threshold,
+            iou=iou_threshold,
+            classes=self.get_filter_class_ids(params),
+            verbose=False,
         )
 
         shapes = []

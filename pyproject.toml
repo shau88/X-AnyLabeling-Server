@@ -29,6 +29,7 @@ dependencies = [
     "pydantic>=2.12.0",
     "openai>=1.99.1",
     "requests>=2.26.0",
+    "packaging>=23.2",
     "opencv-python-headless>=4.11.0",
     "loguru",
     "numpy",
@@ -59,6 +60,11 @@ locateanything = [
     "accelerate",
     "peft",
     "torchvision",
+]
+
+groundingpi = [
+    "transformers @ https://raw.githubusercontent.com/groundingpi/GroundingPI/090932430bbbeea004cfa461767ede7f563c0f3a/third_party/transformers.tar.gz#sha256=3b9d4b20efc92041d3d270be1b875a760f7ed2651ba01be59286d1e0ad6d4f25",
+    "accelerate",
 ]
 
 sam3 = [
@@ -97,6 +103,11 @@ x-anylabeling-server = "app.cli:main"
 where = ["."]
 include = ["app*"]
 exclude = ["logs*", "weights*", "configs*", "tests*", "docs*"]
+
+[tool.setuptools.package-data]
+"app.models.sam3" = ["assets/bpe_simple_vocab_16e6.txt.gz"]
+"app.models.groundingpi_impl" = ["LICENSE", "NOTICE"]
+"app.models.groundanything_impl" = ["LICENSE", "NOTICE"]
 
 [tool.setuptools.dynamic]
 version = {attr = "app.__version__"}

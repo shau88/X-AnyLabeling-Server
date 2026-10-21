@@ -2,7 +2,7 @@ import math
 import numpy as np
 from typing import Any, Dict
 
-from . import BaseModel
+from . import UltralyticsYOLOModel
 from app.schemas.shape import Shape
 from app.core.registry import register_model
 
@@ -10,7 +10,7 @@ from app.core.registry import register_model
 @register_model(
     "yolo11n_obb", "yolo11s_obb", "yolo11m_obb", "yolo11l_obb", "yolo11x_obb"
 )
-class YOLO11OBB(BaseModel):
+class YOLO11OBB(UltralyticsYOLOModel):
     """YOLO11 oriented bounding box detection model."""
 
     @staticmethod
@@ -83,7 +83,11 @@ class YOLO11OBB(BaseModel):
         )
 
         results = self.model(
-            image, conf=conf_threshold, iou=iou_threshold, verbose=False
+            image,
+            conf=conf_threshold,
+            iou=iou_threshold,
+            classes=self.get_filter_class_ids(params),
+            verbose=False,
         )
 
         shapes = []

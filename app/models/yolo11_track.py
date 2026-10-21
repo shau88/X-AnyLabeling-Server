@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Any, Dict
 
-from . import BaseModel
+from . import UltralyticsYOLOModel
 from app.schemas.shape import Shape
 from app.core.registry import register_model
 
@@ -13,7 +13,7 @@ from app.core.registry import register_model
     "yolo11l_track",
     "yolo11x_track",
 )
-class YOLO11DetectionTrack(BaseModel):
+class YOLO11DetectionTrack(UltralyticsYOLOModel):
     """YOLO11 object detection with tracking model."""
 
     def load(self):
@@ -58,6 +58,7 @@ class YOLO11DetectionTrack(BaseModel):
             image,
             conf=conf_threshold,
             iou=iou_threshold,
+            classes=self.get_filter_class_ids(params),
             persist=True,
             tracker=f"{self.tracker_type}.yaml",
             verbose=False,
